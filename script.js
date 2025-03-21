@@ -1,8 +1,19 @@
 let peerConnections = {};
 let dataChannels = {};
-const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const configuration = {
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }, // 無料STUNサーバー
+        { urls: "stun:stun1.l.google.com:19302" }
+        // TURNサーバーを追加する場合（無料TURNは限定的なので省略。必要なら有料サービス利用）
+    ]
+};
 let username = "";
-const COOLTIME = 5000; // 5秒（ミリ秒単位）
+const COOLTIME = 5000;
+
+// Pusher初期化（無料アカウントで取得したキーを使う）
+const pusher = new Pusher('d0f990aaf519febf5238', {
+    cluster: 'ap3'
+});
 
 // クールタイムのチェックとボタン状態更新
 function updateButtonState(roomId) {
@@ -85,7 +96,6 @@ if (window.location.pathname.includes("chat.html")) {
         setupWebRTC(roomId);
         loadMessages(roomId);
         setInterval(() => updateButtonState(roomId), 100);
-        setInterval(() => syncMessages(roomId), 1000); // リアルタイム同期
     }
 }
 
@@ -99,10 +109,9 @@ function setUsername() {
     setupWebRTC(roomId);
     loadMessages(roomId);
     setInterval(() => updateButtonState(roomId), 100);
-    setInterval(() => syncMessages(roomId), 1000); // リアルタイム同期
 }
 
-// WebRTCセットアップ（リアルタイム対応）
+// WebRTCセットアップ（異なるデバイス対応）
 function setupWebRTC(roomId) {
     peerConnections[roomId] = new RTCPeerConnection(configuration);
     dataChannels[roomId] = peerConnections[roomId].createDataChannel(`chat_${roomId}`);
@@ -115,46 +124,46 @@ function setupWebRTC(roomId) {
 
     peerConnections[roomId].onicecandidate = (event) => {
         if (event.candidate) {
-            const candidates = JSON.parse(localStorage.getItem(`ice_${roomId}`) || "[]");
-            candidates.push(event.candidate);
-            localStorage.setItem(`ice_${roomId}`, JSON.stringify(candidates));
+            pusher.channel(`room_${roomId}`).trigger('ice-candidate', { candidate: event.candidate });
         }
     };
 
+    // オファー作成と送信
     peerConnections[roomId].createOffer()
         .then(offer => peerConnections[roomId].setLocalDescription(offer))
         .then(() => {
-            localStorage.setItem(`offer_${roomId}`, JSON.stringify(peerConnections[roomId].localDescription));
+            pusher.channel(`room_${roomId}`).trigger('offer', peerConnections[roomId].localDescription);
         });
 
-    // 他ピアの接続を監視
-    setInterval(() => {
-        const offer = JSON.parse(localStorage.getItem(`offer_${roomId}`) || "{}");
-        const candidates = JSON.parse(localStorage.getItem(`ice_${roomId}`) || "[]");
-        if (offer && !peerConnections[roomId].remoteDescription) {
-            peerConnections[roomId].setRemoteDescription(new RTCSessionDescription(offer))
-                .then(() => candidates.forEach(candidate => peerConnections[roomId].addIceCandidate(new RTCIceCandidate(candidate))))
-                .catch(err => console.log("接続エラー:", err));
+    // Pusherでシグナリングを処理
+    const channel = pusher.subscribe(`room_${roomId}`);
+    channel.bind('offer', (data) => {
+        if (!peerConnections[roomId].remoteDescription) {
+            peerConnections[roomId].setRemoteDescription(new RTCSessionDescription(data))
+                .then(() => peerConnections[roomId].createAnswer())
+                .then(answer => peerConnections[roomId].setLocalDescription(answer))
+                .then(() => {
+                    pusher.channel(`room_${roomId}`).trigger('answer', peerConnections[roomId].localDescription);
+                });
         }
-    }, 1000);
+    });
+
+    channel.bind('answer', (data) => {
+        if (!peerConnections[roomId].remoteDescription) {
+            peerConnections[roomId].setRemoteDescription(new RTCSessionDescription(data));
+        }
+    });
+
+    channel.bind('ice-candidate', (data) => {
+        peerConnections[roomId].addIceCandidate(new RTCIceCandidate(data.candidate));
+    });
 }
 
 // メッセージ読み込み
 function loadMessages(roomId) {
     const messages = JSON.parse(localStorage.getItem(`chat_${roomId}`) || "[]");
-    let counter = parseInt(localStorage.getItem(`counter_${roomId}`) || "0");
-    document.getElementById("messages").innerHTML = ""; // 初期化
+    document.getElementById("messages").innerHTML = "";
     messages.forEach((msg, index) => displayMessage(msg.message, roomId, false, index + 1, msg.image));
-    localStorage.setItem(`counter_${roomId}`, counter.toString());
-}
-
-// メッセージ同期（リアルタイム用）
-function syncMessages(roomId) {
-    const messages = JSON.parse(localStorage.getItem(`chat_${roomId}`) || "[]");
-    const currentMessageCount = document.getElementById("messages").childElementCount;
-    if (messages.length > currentMessageCount) {
-        loadMessages(roomId); // 新しいメッセージがあれば更新
-    }
 }
 
 // メッセージ表示
@@ -193,7 +202,7 @@ function displayMessage(message, roomId, isNew = true, counter = null, imageBase
     messageDiv.scrollTop = messageDiv.scrollHeight;
 }
 
-// メッセージ送信（リアルタイム対応）
+// メッセージ送信
 function sendMessage() {
     const roomId = new URLSearchParams(window.location.search).get("room");
     const currentTime = Date.now();
@@ -229,7 +238,7 @@ function sendMessage() {
     }
 }
 
-// 画像アップロード（リアルタイム対応）
+// 画像アップロード
 function uploadImage() {
     const roomId = new URLSearchParams(window.location.search).get("room");
     const currentTime = Date.now();
@@ -276,8 +285,6 @@ function deleteRoomData() {
         localStorage.removeItem(`counter_${roomId}`);
         localStorage.removeItem(`username_${roomId}`);
         localStorage.removeItem(`lastMessageTime_${username}_${roomId}`);
-        localStorage.removeItem(`ice_${roomId}`);
-        localStorage.removeItem(`offer_${roomId}`);
         window.location.href = "index.html";
     }
 }
