@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>スレッド - <span id="roomName"></span></title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1><span id="currentRoomTitle"></span> (<span id="currentRoom"></span>)</h1>
+        <div id="usernamePrompt" class="username-prompt">
+            <input type="text" id="usernameInput" placeholder="名前を入力（名無しでもOK）">
+            <button onclick="setUsername()">決定</button>
+        </div>
+        <div id="chatArea" class="chat-area" style="display: none;">
+            <div id="messages" class="message-box"></div>
+            <div class="controls">
+                <textarea id="messageInput" class="message-input" placeholder="*太字* _斜体_ ~取消~ >引用 ```コード``` >>番号（改行可）"></textarea>
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;" onchange="uploadImage()">
+                <button onclick="sendMessage()">書き込む</button>
+                <button onclick="document.getElementById('imageUpload').click()">画像</button>
+                <button onclick="toggleTheme()">テーマ切替</button>
+                <button onclick="returnToIndex()">板に戻る</button>
+                <button onclick="deleteRoomData()" class="delete-btn">このスレ削除</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

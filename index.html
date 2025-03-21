@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>掲示板 - スレッド一覧</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="hero">
+        <div class="container">
+            <h1>掲示板</h1>
+            <div id="threadList" class="thread-list"></div>
+            <div class="thread-form">
+                <input type="text" id="threadTitle" placeholder="スレッドタイトル">
+                <button onclick="createThread()">スレ立て</button>
+                <button onclick="resetAllData()" class="reset-btn">全データリセット</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
